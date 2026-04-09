@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 import json
-import gzip
 import logging
 import os
 from pathlib import Path
@@ -20,7 +19,6 @@ app.add_middleware(
 logger = logging.getLogger("uvicorn.error")
 
 analytics_cache = None
-geojson_payload = None
 data_ready = False
 data_error = None
 base_dir = Path(__file__).resolve().parent
@@ -80,32 +78,6 @@ def get_geojson():
         iter_file(),
         media_type="application/json",
         headers={"Content-Encoding": "gzip", "Cache-Control": "public, max-age=300"}
-    )
-
-@app.get("/api/geojson/year/{year}")
-def get_geojson_by_year(year: int):
-    """Year-filtered endpoint — returns only polities active at the given year."""
-    global geojson_payload
-    if geojson_payload is None:
-        if not geojson_path.exists():
-            raise HTTPException(status_code=503, detail="Data not ready")
-        geojson_payload = json.loads(gzip.decompress(geojson_path.read_bytes()).decode("utf-8"))
-
-    features = geojson_payload.get("features", [])
-    filtered = [
-        feature
-        for feature in features
-        if feature.get("properties", {}).get("FromYear", 0) <= year
-        and feature.get("properties", {}).get("ToYear", 0) >= year
-    ]
-    compressed = gzip.compress(
-        json.dumps({"type": "FeatureCollection", "features": filtered}).encode("utf-8"),
-        compresslevel=6,
-    )
-    return Response(
-        content=compressed,
-        media_type="application/json",
-        headers={"Content-Encoding": "gzip", "Cache-Control": "public, max-age=60"}
     )
 
 if __name__ == "__main__":
