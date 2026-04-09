@@ -139,6 +139,16 @@ function App() {
   useEffect(() => {
     async function load() {
       const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const fetchJsonWithTimeout = async (url, timeoutMs) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          return response;
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
       const maxAttempts = 20;
       const healthUrl = `${API_BASE}/health`;
 
@@ -153,14 +163,14 @@ function App() {
           setLoadingStatus(`Initializing Global Archives... (${attempt}/${maxAttempts})`);
 
           try {
-            const healthRes = await fetch(healthUrl);
+            const healthRes = await fetchJsonWithTimeout(healthUrl, 2000);
             if (healthRes.ok) {
               const health = await healthRes.json();
               if (health.ready) {
                 setLoadingStatus('Loading archive data...');
                 const [geoRes, anaRes] = await Promise.all([
-                  fetch(`${API_BASE}/geojson`),
-                  fetch(`${API_BASE}/analytics`)
+                  fetchJsonWithTimeout(`${API_BASE}/geojson`, 15000),
+                  fetchJsonWithTimeout(`${API_BASE}/analytics`, 15000)
                 ]);
 
                 if (!geoRes.ok || !anaRes.ok) {
