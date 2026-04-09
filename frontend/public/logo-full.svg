@@ -1,0 +1,21 @@
+<svg width="400" height="100" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldGradFull" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#38bdf8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon Portion -->
+  <circle cx="50" cy="50" r="40" fill="#0f172a" />
+  <path d="M 18 33 A 40 40 0 0 1 82 33 Q 50 40 18 33" fill="url(#goldGradFull)" />
+  <path d="M 10 50 Q 30 40 50 50 T 90 50" fill="none" stroke="#2dd4bf" stroke-width="6" stroke-linecap="round" />
+  <path d="M 15 65 Q 35 55 50 65 T 85 65" fill="none" stroke="#0ea5e9" stroke-width="4" stroke-linecap="round" />
+  
+  <!-- Text Portion -->
+  <text x="100" y="65" font-family="'Outfit', sans-serif" font-size="44" font-weight="800" fill="url(#textGrad)">EmpireFlow</text>
+</svg>
