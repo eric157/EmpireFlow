@@ -6,6 +6,7 @@ import json
 import gzip
 import logging
 import os
+import threading
 from pathlib import Path
 
 app = FastAPI()
@@ -23,11 +24,20 @@ logger = logging.getLogger("uvicorn.error")
 geo_data = None
 analytics_cache = None
 geojson_bytes_gz = None   # Pre-compressed GZip bytes — served instantly
+data_ready = False
+data_error = None
 
 @app.on_event("startup")
 def load_data():
-    global geo_data, analytics_cache, geojson_bytes_gz
+    thread = threading.Thread(target=load_data_worker, daemon=True)
+    thread.start()
+
+
+def load_data_worker():
+    global geo_data, analytics_cache, geojson_bytes_gz, data_ready, data_error
     try:
+        data_ready = False
+        data_error = None
         logger.info("Loading GLOBE GeoJSON data (LITE version)...")
         base_dir = Path(__file__).resolve().parent
         zip_path = base_dir / 'empireflow.geojson.zip'
@@ -76,16 +86,22 @@ def load_data():
                 "total_area": float(active['Area'].sum()) if not active.empty else 0
             })
         analytics_cache = analytics
+        data_ready = True
         logger.info("Ready. Backend fully initialized.")
 
     except Exception as e:
+        data_error = str(e)
         logger.error(f"Startup failed: {e}")
         import traceback; traceback.print_exc()
 
 @app.get("/api/health")
 def health():
-    ready = geojson_bytes_gz is not None and analytics_cache is not None
-    return {"status": "ok" if ready else "loading", "ready": ready}
+    ready = data_ready and geojson_bytes_gz is not None and analytics_cache is not None
+    return {
+        "status": "ok" if ready else "loading",
+        "ready": ready,
+        "error": data_error,
+    }
 
 @app.get("/api/analytics")
 def get_analytics():

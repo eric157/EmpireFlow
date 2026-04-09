@@ -137,32 +137,47 @@ function App() {
   // Load Data
   useEffect(() => {
     async function load() {
-      try {
-        const [geoRes, anaRes] = await Promise.all([
-          fetch(`${API_BASE}/geojson`),
-          fetch(`${API_BASE}/analytics`)
-        ]);
-        if (!geoRes.ok || !anaRes.ok) {
-          throw new Error(`Archive API returned ${geoRes.status} and ${anaRes.status}`);
-        }
-        const geoJSON = await geoRes.json();
-        const anaJSON = await anaRes.json();
-        
-        const features = geoJSON.features || [];
-        // Build the stable color map ONCE from all features
-        buildColorMap(features);
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const maxAttempts = 36;
+      const retryableStatus = (status) => status === 503 || status === 502 || status === 504;
 
-        setGeoData(features);
-        setAnalytics(anaJSON.timeline || []);
-        
-        if (anaJSON.timeline?.length > 0) {
-          setYear(anaJSON.timeline[0].year);
+      try {
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          const [geoRes, anaRes] = await Promise.all([
+            fetch(`${API_BASE}/geojson`),
+            fetch(`${API_BASE}/analytics`)
+          ]);
+
+          if (geoRes.ok && anaRes.ok) {
+            const geoJSON = await geoRes.json();
+            const anaJSON = await anaRes.json();
+
+            const features = geoJSON.features || [];
+            // Build the stable color map ONCE from all features
+            buildColorMap(features);
+
+            setGeoData(features);
+            setAnalytics(anaJSON.timeline || []);
+
+            if (anaJSON.timeline?.length > 0) {
+              setYear(anaJSON.timeline[0].year);
+            }
+            setLoadError(null);
+            setLoading(false);
+            return;
+          }
+
+          if (!retryableStatus(geoRes.status) && !retryableStatus(anaRes.status)) {
+            throw new Error(`Archive API returned ${geoRes.status} and ${anaRes.status}`);
+          }
+
+          await wait(5000);
         }
-        setLoadError(null);
+
+        throw new Error('Backend is still warming up. Please try again in a moment.');
       } catch (err) {
         console.error("Error loading API data:", err);
         setLoadError(err instanceof Error ? err.message : 'Unable to load archive data');
-      } finally {
         setLoading(false);
       }
     }
