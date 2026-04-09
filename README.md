@@ -11,7 +11,7 @@
 - [Maintainer docs](#maintainer-docs)
     - [Making a release](#making-a-release)
 
-## About the project
+## About the project: [EmpireFlow](https://eric157.github.io/EmpireFlow/)
 
 EmpireFlow is a comprehensive open-source geospatial dataset of worldwide polities from 3400BCE to 2024CE.  It is part of the [Seshat Global History Databank](https://seshatdatabank.info/) project.  Presently it comprises over 1600 political entities sampled at varying timesteps and spatial scales. Description of its initial format, construction, and source material may be found [here](https://osf.io/preprints/socarxiv/24wd6).  Released versions may be accessed here or [on Zenodo](https://zenodo.org/records/13363121).
 
