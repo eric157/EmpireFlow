@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 import json
 import gzip
 import logging
@@ -19,32 +19,26 @@ app.add_middleware(
 
 logger = logging.getLogger("uvicorn.error")
 
-geo_data = None
 analytics_cache = None
-geojson_bytes_gz = None   # Pre-compressed GZip bytes — served instantly
 geojson_payload = None
 data_ready = False
 data_error = None
+base_dir = Path(__file__).resolve().parent
+geojson_path = base_dir / "empireflow_geojson.json.gz"
+analytics_path = base_dir / "analytics.json"
 
 @app.on_event("startup")
 def load_data():
-    global geo_data, analytics_cache, geojson_bytes_gz, geojson_payload, data_ready, data_error
+    global data_ready, data_error
     try:
         data_ready = False
         data_error = None
-        base_dir = Path(__file__).resolve().parent
-        geojson_path = base_dir / "empireflow_geojson.json.gz"
-        analytics_path = base_dir / "analytics.json"
 
         if not geojson_path.exists() or not analytics_path.exists():
             raise FileNotFoundError("Precomputed data files are missing")
 
-        logger.info("Loading precomputed GeoJSON and analytics...")
-        geojson_bytes_gz = geojson_path.read_bytes()
-        analytics_cache = json.loads(analytics_path.read_text(encoding="utf-8"))["timeline"]
-        geojson_payload = None
         data_ready = True
-        logger.info("Ready. Backend fully initialized.")
+        logger.info("Ready. Backend initialized with on-demand data loading.")
 
     except Exception as e:
         data_error = str(e)
@@ -53,7 +47,7 @@ def load_data():
 
 @app.get("/api/health")
 def health():
-    ready = data_ready and geojson_bytes_gz is not None and analytics_cache is not None
+    ready = data_ready and geojson_path.exists() and analytics_path.exists()
     return {
         "status": "ok" if ready else "loading",
         "ready": ready,
@@ -62,17 +56,28 @@ def health():
 
 @app.get("/api/analytics")
 def get_analytics():
+    global analytics_cache
     if not analytics_cache:
-        raise HTTPException(status_code=503, detail="Analytics not ready")
+        if not analytics_path.exists():
+            raise HTTPException(status_code=503, detail="Analytics not ready")
+        analytics_cache = json.loads(analytics_path.read_text(encoding="utf-8"))["timeline"]
     return {"timeline": analytics_cache}
 
 @app.get("/api/geojson")
 def get_geojson():
-    """Serves pre-serialized, GZip-compressed GeoJSON — ultra fast."""
-    if geojson_bytes_gz is None:
+    """Streams the pre-compressed GeoJSON directly from disk."""
+    if not geojson_path.exists():
         raise HTTPException(status_code=503, detail="GeoJSON not ready")
-    return Response(
-        content=geojson_bytes_gz,
+    def iter_file():
+        with geojson_path.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    return StreamingResponse(
+        iter_file(),
         media_type="application/json",
         headers={"Content-Encoding": "gzip", "Cache-Control": "public, max-age=300"}
     )
@@ -82,9 +87,9 @@ def get_geojson_by_year(year: int):
     """Year-filtered endpoint — returns only polities active at the given year."""
     global geojson_payload
     if geojson_payload is None:
-        if geojson_bytes_gz is None:
+        if not geojson_path.exists():
             raise HTTPException(status_code=503, detail="Data not ready")
-        geojson_payload = json.loads(gzip.decompress(geojson_bytes_gz).decode("utf-8"))
+        geojson_payload = json.loads(gzip.decompress(geojson_path.read_bytes()).decode("utf-8"))
 
     features = geojson_payload.get("features", [])
     filtered = [
