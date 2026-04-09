@@ -6,16 +6,11 @@ ENV PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential gdal-bin libgdal-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 
 COPY main.py ./main.py
-COPY empireflow.geojson.zip ./empireflow.geojson.zip
-
-EXPOSE 5000
+COPY analytics.json ./analytics.json
+COPY empireflow_geojson.json.gz ./empireflow_geojson.json.gz
 
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000}"]
