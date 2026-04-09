@@ -118,6 +118,7 @@ function App() {
   const [analytics, setAnalytics] = useState([]);
   const [year, setYear] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingStatus, setLoadingStatus] = useState('Initializing Global Archives...');
   const [loadError, setLoadError] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [autoZoom, setAutoZoom] = useState(true);
@@ -138,40 +139,61 @@ function App() {
   useEffect(() => {
     async function load() {
       const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const maxAttempts = 36;
-      const retryableStatus = (status) => status === 503 || status === 502 || status === 504;
+      const maxAttempts = 20;
+      const healthUrl = `${API_BASE}/health`;
+
+      if (!API_BASE) {
+        setLoadError('VITE_API_BASE_URL is not configured. Rebuild the frontend with your Render URL.');
+        setLoading(false);
+        return;
+      }
 
       try {
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-          const [geoRes, anaRes] = await Promise.all([
-            fetch(`${API_BASE}/geojson`),
-            fetch(`${API_BASE}/analytics`)
-          ]);
+          setLoadingStatus(`Initializing Global Archives... (${attempt}/${maxAttempts})`);
 
-          if (geoRes.ok && anaRes.ok) {
-            const geoJSON = await geoRes.json();
-            const anaJSON = await anaRes.json();
+          try {
+            const healthRes = await fetch(healthUrl);
+            if (healthRes.ok) {
+              const health = await healthRes.json();
+              if (health.ready) {
+                setLoadingStatus('Loading archive data...');
+                const [geoRes, anaRes] = await Promise.all([
+                  fetch(`${API_BASE}/geojson`),
+                  fetch(`${API_BASE}/analytics`)
+                ]);
 
-            const features = geoJSON.features || [];
-            // Build the stable color map ONCE from all features
-            buildColorMap(features);
+                if (!geoRes.ok || !anaRes.ok) {
+                  throw new Error(`Archive API returned ${geoRes.status} and ${anaRes.status}`);
+                }
 
-            setGeoData(features);
-            setAnalytics(anaJSON.timeline || []);
+                const geoJSON = await geoRes.json();
+                const anaJSON = await anaRes.json();
 
-            if (anaJSON.timeline?.length > 0) {
-              setYear(anaJSON.timeline[0].year);
+                const features = geoJSON.features || [];
+                // Build the stable color map ONCE from all features
+                buildColorMap(features);
+
+                setGeoData(features);
+                setAnalytics(anaJSON.timeline || []);
+
+                if (anaJSON.timeline?.length > 0) {
+                  setYear(anaJSON.timeline[0].year);
+                }
+                setLoadError(null);
+                setLoading(false);
+                return;
+              }
+
+              setLoadingStatus(health.error ? `Backend warming up... ${health.error}` : 'Backend warming up...');
+            } else {
+              setLoadingStatus(`Waiting for backend... (${healthRes.status})`);
             }
-            setLoadError(null);
-            setLoading(false);
-            return;
+          } catch (healthErr) {
+            setLoadingStatus('Connecting to backend...');
           }
 
-          if (!retryableStatus(geoRes.status) && !retryableStatus(anaRes.status)) {
-            throw new Error(`Archive API returned ${geoRes.status} and ${anaRes.status}`);
-          }
-
-          await wait(5000);
+          await wait(1000);
         }
 
         throw new Error('Backend is still warming up. Please try again in a moment.');
@@ -423,6 +445,7 @@ function App() {
             <path d="M 22 138 Q 60 118 100 138 T 178 138" fill="none" stroke="#0ea5e9" strokeWidth="7" strokeLinecap="round" opacity="0.7"/>
           </svg>
           <h2 style={{ fontFamily: 'Outfit, Inter, sans-serif', letterSpacing: '2px', color: '#93c5fd' }}>Initializing Global Archives...</h2>
+          <p style={{ marginTop: '8px', color: '#cbd5e1', fontSize: '14px' }}>{loadingStatus}</p>
         </div>
       </div>
     );
